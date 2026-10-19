@@ -1,0 +1,37 @@
+# Secrets and live configuration - never commit these
+.env
+config.yaml
+*.env
+
+# Your data
+*.sqlite3
+*.sqlite3-*
+prep.txt
+teachers.json
+alerts.json
+dumps/
+feed-cache/
+test-out/
+logs/
+
+# A live Teams session lives here. Committing it would hand over your account.
+profile/
+test-profile/
+preflight-profile/
+# Snapshots of that profile hold the same live session.
+snapshots/
+profile-snapshot-*/
+profile-replaced-*/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Left by install.sh --encrypt-secrets until you delete it: plaintext secrets
+*.before-encrypt
+# flock files from the systemd units
+*.lock

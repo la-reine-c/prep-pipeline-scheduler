@@ -1,0 +1,27 @@
+[Unit]
+Description=Prep recheck - re-plan only what changed since the last check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Replace PREP_USER and PREP_HOME before installing - install.sh does this.
+User=PREP_USER
+WorkingDirectory=PREP_HOME
+EnvironmentFile=-PREP_HOME/.env
+# Secrets, decrypted by systemd into a private tmpfs only this unit can read.
+# install.sh writes one line per credential that exists in /etc/prep/creds.
+LoadCredentialEncrypted=ICLOUD_USER:/etc/prep/creds/icloud-user.cred
+LoadCredentialEncrypted=ICLOUD_APP_PASSWORD:/etc/prep/creds/icloud-app-password.cred
+LoadCredentialEncrypted=SOCS_FEED_URL:/etc/prep/creds/socs-feed-url.cred
+LoadCredentialEncrypted=TELEGRAM_BOT_TOKEN:/etc/prep/creds/telegram-bot-token.cred
+LoadCredentialEncrypted=TELEGRAM_CHAT_ID:/etc/prep/creds/telegram-chat-id.cred
+
+# Reads the database and stops, unless a prep was finished, a session was
+# missed, an estimate moved or prep is waiting to be booked. Only then does
+# it open the calendar. Its own lock, so a slow check is skipped rather than
+# stacked; the planning itself is serialised with the full run by the
+# database's planning lock.
+ExecStart=/usr/bin/flock -n PREP_HOME/recheck.lock \
+  PREP_HOME/.venv/bin/python -m prep.recheck --config PREP_HOME/config.yaml
+TimeoutStartSec=240

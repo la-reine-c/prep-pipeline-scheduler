@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prep</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --surface-0: #f4f4f2;
+    --surface-1: #fcfcfb;
+    --border:    #dedcd6;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #7c7a74;
+
+    /* categorical - validated as a pair, light mode */
+    --series-est:    #2a78d6;
+    --series-actual: #eb6834;
+
+    /* status - fixed, never themed. Always paired with an icon + word. */
+    --good: #0ca30c;
+    --warning: #fab219;
+    --serious: #ec835a;
+    --critical: #d03b3b;
+
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      --surface-0: #121211;
+      --surface-1: #1a1a19;
+      --border:    #35342f;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #8f8e85;
+      --series-est:    #3987e5;
+      --series-actual: #d95926;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  body {
+    margin: 0; padding: 1.25rem 1rem 4rem;
+    background: var(--surface-0); color: var(--text-primary);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    max-width: 62rem; margin-inline: auto;
+  }
+  h1 { font-size: 1.35rem; margin: 0 0 .15rem; letter-spacing: -.01em; }
+  h2 { font-size: .82rem; text-transform: uppercase; letter-spacing: .06em;
+       color: var(--text-muted); margin: 2rem 0 .6rem; font-weight: 600; }
+  a { color: inherit; }
+
+  .card { background: var(--surface-1); border: 1px solid var(--border);
+          border-radius: var(--radius); padding: .9rem 1rem; }
+
+  .runbar { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center;
+            font-size: .84rem; color: var(--text-secondary); margin-bottom: 1.25rem; }
+  .dot { width: .55rem; height: .55rem; border-radius: 50%; display: inline-block;
+         margin-right: .35rem; vertical-align: baseline; }
+
+  /* ---- headline tiles ---- */
+  .tiles { display: grid; gap: .6rem;
+           grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); }
+  .tile { background: var(--surface-1); border: 1px solid var(--border);
+          border-radius: var(--radius); padding: .75rem .85rem; }
+  .tile .n { font-size: 1.65rem; font-weight: 650; letter-spacing: -.02em;
+             font-variant-numeric: tabular-nums; }
+  .tile .k { font-size: .76rem; color: var(--text-muted); }
+
+  /* ---- prep list ---- */
+  .prep { background: var(--surface-1); border: 1px solid var(--border);
+          border-radius: var(--radius); padding: .75rem .9rem; margin-bottom: .5rem; }
+  .prep-top { display: flex; gap: .6rem; align-items: baseline; flex-wrap: wrap; }
+  .prep-title { font-weight: 560; flex: 1 1 14rem; min-width: 0; }
+  .due { font-size: .8rem; color: var(--text-secondary);
+         font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .who { font-size: .78rem; color: var(--text-muted); }
+
+  .meta { display: flex; flex-wrap: wrap; gap: .4rem .9rem; align-items: center;
+          margin-top: .5rem; font-size: .8rem; color: var(--text-secondary); }
+
+  /* status badge: colour + icon + word, never colour alone */
+  .conf { display: inline-flex; align-items: center; gap: .3rem;
+          font-size: .74rem; font-weight: 560; padding: .1rem .45rem;
+          border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; }
+  .conf svg { width: .7rem; height: .7rem; flex: none; }
+  .conf-measured  { color: var(--good); }
+  .conf-shrunk    { color: var(--warning); }
+  .conf-global    { color: var(--serious); }
+  .conf-pattern   { color: var(--critical); }
+  .conf-corrected { color: var(--text-secondary); }
+  .conf-critical  { color: var(--critical); }
+
+  /* ---- estimate vs actual bars ---- */
+  .cal { display: grid; grid-template-columns: 5.5rem 1fr minmax(6.5rem, auto);
+         gap: .5rem .7rem; align-items: center; font-size: .82rem; }
+  .cal .name { color: var(--text-secondary); white-space: nowrap;
+               overflow: hidden; text-overflow: ellipsis; }
+  .track { display: grid; gap: 2px; }           /* 2px surface gap between fills */
+  .bar { height: 7px; border-radius: 0 4px 4px 0; min-width: 2px; }
+  .bar-est    { background: var(--series-est); }
+  .bar-actual { background: var(--series-actual); }
+  .cal .num { text-align: right; font-variant-numeric: tabular-nums;
+              color: var(--text-secondary); line-height: 1.3; }
+  .cal .num .sub { color: var(--text-muted); font-size: .74rem;
+                   display: block; white-space: nowrap; }
+
+  .legend { display: flex; gap: 1rem; font-size: .78rem; color: var(--text-secondary);
+            margin-bottom: .7rem; }
+  .swatch { width: .65rem; height: .65rem; border-radius: 2px;
+            display: inline-block; margin-right: .3rem; }
+
+  /* ---- forms ---- */
+  form.inline { display: inline-flex; flex-wrap: wrap; gap: .3rem;
+                align-items: center; max-width: 100%; }
+  input, select, button {
+    font: inherit; font-size: .82rem; padding: .25rem .45rem;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-0); color: var(--text-primary);
+  }
+  input, select { min-width: 0; max-width: 100%; }
+  input[type=number] { width: 4.2rem; }
+  button { cursor: pointer; font-weight: 550; touch-action: manipulation; }
+  /* Only where there is a real pointer: on a touchscreen :hover sticks to
+     whatever was tapped last. */
+  @media (hover: hover) { button:hover { border-color: var(--text-muted); } }
+  button:active { border-color: var(--text-muted); background: var(--surface-1); }
+  /* Safari draws date and time fields its own way - a fixed width wider than
+     asked, centred - which is what made them overlap their neighbours. This
+     makes them size like every other field. */
+  input[type=date], input[type=time] {
+    -webkit-appearance: none; appearance: none;
+    display: block; min-height: 1.9rem; line-height: 1.3;
+  }
+  input::-webkit-date-and-time-value { text-align: left; margin: 0; }
+  input::-webkit-datetime-edit { padding: 0; }
+  .link-btn { border: none; background: none; padding: .1rem .2rem;
+              color: var(--text-muted); text-decoration: underline; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th, td { text-align: left; padding: .4rem .35rem;
+           border-bottom: 1px solid var(--border); }
+  th { font-size: .74rem; text-transform: uppercase; letter-spacing: .05em;
+       color: var(--text-muted); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .day { margin-top: .9rem; }
+  .day h3 { font-size: .8rem; margin: 0 0 .3rem; color: var(--text-secondary);
+            font-weight: 600; }
+  .slot { display: flex; flex-wrap: wrap; gap: .2rem .6rem; align-items: baseline;
+          font-size: .84rem; padding: .2rem 0; }
+  .slot > span { min-width: 0; overflow-wrap: anywhere; }
+  .slot .t { font-variant-numeric: tabular-nums; color: var(--text-secondary);
+             white-space: nowrap; }
+
+  .notice { border-color: var(--warning); margin-bottom: 1rem; font-size: .88rem; }
+  .notice.working { border-color: var(--series-est); display: flex; gap: .6rem;
+                    align-items: center; }
+  .spinner { width: .9rem; height: .9rem; flex: none; border-radius: 50%;
+             border: 2px solid var(--border); border-top-color: var(--series-est);
+             animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+  button[aria-busy=true] { opacity: .6; cursor: progress; }
+  .mine { font-size: .72rem; font-weight: 560; padding: .05rem .4rem;
+          border-radius: 99px; border: 1px solid var(--border);
+          color: var(--text-secondary); white-space: nowrap; }
+  .task-form { display: grid; gap: .5rem .6rem;
+               grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); }
+  .task-form label, .row-form label { display: grid; gap: .15rem; min-width: 0;
+                     font-size: .76rem; color: var(--text-muted); }
+  .task-form .wide { grid-column: 1 / -1; }
+  .task-form input, .task-form select,
+  .row-form input, .row-form select { width: 100%; }
+  .task-form button { justify-self: start; }
+
+  /* blackouts and outside commitments: a grid, so no field can push into
+     the next one however wide Safari decides a date field is. */
+  .row-form { display: grid; gap: .5rem .6rem; align-items: end;
+              grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); }
+  .row-form > * { min-width: 0; }
+  .row-form .grow { grid-column: span 2; }
+  .row-form button { min-height: 1.9rem; }
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  .empty { color: var(--text-muted); font-size: .86rem; }
+  .warn { color: var(--critical); font-weight: 560; }
+  details summary { cursor: pointer; font-size: .84rem; color: var(--text-secondary); }
+  /* Touchscreens - iPhone and iPad alike. Fields under 16px make Safari
+     zoom the page every time one is tapped, and a target needs to be about
+     44px to hit reliably with a thumb. */
+  @media (pointer: coarse) {
+    input, select, button { font-size: 16px; min-height: 2.75rem;
+                            padding: .4rem .6rem; }
+    input[type=date], input[type=time] { min-height: 2.75rem; }
+    input[type=number] { width: 5.5rem; }
+    .task-form input[type=number] { width: 100%; }
+    .row-form { grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); }
+    .link-btn { min-height: 2.75rem; padding: .4rem .5rem; }
+    .meta { gap: .5rem .9rem; }
+    form.inline { gap: .4rem; }
+  }
+
+  /* Phones */
+  @media (max-width: 34rem) {
+    body { padding-inline: .75rem; }
+    .cal { grid-template-columns: 4.2rem 1fr minmax(5.6rem, auto); font-size: .78rem; }
+    .prep-top { gap: .3rem; }
+    .card, .prep { padding: .8rem; }
+    .task-form, .row-form { grid-template-columns: 1fr 1fr; }
+    .row-form .grow, .row-form .full { grid-column: 1 / -1; }
+    .task-form button, .row-form button { width: 100%; grid-column: 1 / -1; }
+  }
+</style>
+</head>
+<body>
+
+{% set p = prefix or '' %}
+{% macro tok() %}{% if token %}<input type="hidden" name="token" value="{{ token }}">{% endif %}{% endmacro %}
+
+{# icon + label pairing, so a status is never colour alone #}
+{% macro confidence_badge(source) %}
+  {% set map = {
+    'corrected': ('conf-corrected', 'corrected by you'),
+    'tracked':   ('conf-measured',  'tracked'),
+    'measured':  ('conf-measured',  'measured'),
+    'shrunk':    ('conf-shrunk',    'few timings'),
+    'global':    ('conf-global',    'no timings yet'),
+    'pattern':   ('conf-pattern',   'guess only')
+  } %}
+  {% set cls, word = map.get(source, ('conf-pattern', 'guess only')) %}
+  <span class="conf {{ cls }}" title="How much this estimate is based on your own logged times">
+    {% if source in ('measured', 'tracked') %}
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 8.5l3.5 3.5L13 4.5"/></svg>
+    {% elif source == 'corrected' %}
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3z"/></svg>
+    {% elif source == 'shrunk' %}
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2"
+           stroke-linecap="round" aria-hidden="true">
+        <circle cx="8" cy="8" r="5.5"/><path d="M8 5.2v3.4"/><path d="M8 10.8v.1"/></svg>
+    {% else %}
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M8 2.2l6 11H2z"/><path d="M8 6.6v3"/><path d="M8 11.4v.1"/></svg>
+    {% endif %}
+    {{ word }}
+  </span>
+{% endmacro %}
+
+{% macro prep_card(row) %}
+  {% set predicted = row['predicted_minutes'] or row['scheduled_minutes'] %}
+  <div class="prep">
+    <div class="prep-top">
+      <span class="prep-title">{{ row['label'] }}</span>
+      <span class="due">{{ row['due_at'] | dmy or 'no due date' }}</span>
+    </div>
+    <div class="meta">
+      {% if row['manual'] %}<span class="mine">your task</span>{% endif %}
+      {% if row['teacher'] or not row['manual'] %}
+        <span class="who">{{ row['teacher'] or 'unknown teacher' }}</span>
+      {% endif %}
+      {{ confidence_badge(confidence[row['assignment_id']]) }}
+      {% set tr = tracking.get(row['teacher']) %}
+      <span>book <strong>{{ predicted or '—' }}</strong> min</span>
+      {% if tr and not row['override_minutes'] %}
+        <span title="Booked above the middle so you finish in time about 80% of the time">
+          centre {{ tr.central }} ±{{ tr.spread }}%</span>
+        {% if tr.damped %}<span title="Unusually long evenings, damped rather than dropped">
+          {{ tr.damped }} damped</span>{% endif %}
+      {% endif %}
+      <span>scheduled {{ row['scheduled_minutes'] }} min
+        {% if row['session_count'] %}over {{ row['session_count'] }}{% endif %}</span>
+      {% if row['actual_minutes'] %}
+        <span>actually took <strong>{{ row['actual_minutes'] }}</strong> min</span>
+      {% endif %}
+    </div>
+    <div class="meta">
+      <form class="inline" method="post" action="{{ p }}/log">
+        {{ tok() }}
+        <input type="hidden" name="assignment_id" value="{{ row['assignment_id'] }}">
+        <label>took <input type="number" name="minutes" min="1" max="1440"
+                           placeholder="min" required></label>
+        <button type="submit">Log</button>
+      </form>
+      <form class="inline" method="post" action="{{ p }}/override">
+        {{ tok() }}
+        <input type="hidden" name="assignment_id" value="{{ row['assignment_id'] }}">
+        <label>should be <input type="number" name="minutes" min="1" max="1440"
+               value="{{ row['override_minutes'] or '' }}" placeholder="min"></label>
+        <button type="submit">Correct</button>
+      </form>
+      {% if row['manual'] %}
+        <form class="inline" method="post" action="{{ p }}/reschedule">
+          {{ tok() }}
+          <input type="hidden" name="assignment_id" value="{{ row['assignment_id'] }}">
+          <button type="submit">Reschedule</button>
+        </form>
+        <form class="inline" method="post"
+              action="{{ p }}/task/{{ row['assignment_id'] }}/delete"
+              onsubmit="return confirm('Remove this task and its calendar blocks?')">
+          {{ tok() }}
+          <button class="link-btn" type="submit">remove</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+{% endmacro %}
+
+<h1>Prep</h1>
+<div class="runbar">
+  {% if last_run %}
+    {% set ok = last_run['status'] in ('ok', 'dry_run') %}
+    <span>
+      <span class="dot" style="background: {{ 'var(--good)' if ok else 'var(--critical)' }}"></span>
+      {% if ok %}Last run {{ last_run['started_at'] | dmy }}
+      {% else %}<span class="warn">Last run failed: {{ last_run['status'] }}</span>{% endif %}
+    </span>
+  {% else %}
+    <span><span class="dot" style="background: var(--warning)"></span>Never run</span>
+  {% endif %}
+  <a href="{{ p }}/export.txt{% if token %}?token={{ token }}{% endif %}">export.txt</a>
+</div>
+
+{% if planning.running %}
+<div class="card notice working" id="working" role="status">
+  <span class="spinner" aria-hidden="true"></span>
+  <span id="working-text">{{ planning.running[0] }}&hellip; The page will
+    refresh itself when it is done.</span>
+</div>
+{% endif %}
+{# "...in the background": either still going (the box above says so) or
+   already finished before this page loaded, when what it did is shown. #}
+{% set queued = notice.endswith('this page updates when it is done.') %}
+{% if queued and not planning.running %}
+  {% set notice = (planning.last.notice if planning.last else 'Done.') %}
+{% elif queued %}
+  {% set notice = '' %}
+{% endif %}
+{% if notice %}
+<div class="card notice" role="status">{{ notice }}</div>
+{% endif %}
+
+{% set live = (rows + backlog) | selectattr('due_at') | list %}
+{# Your own tasks may have no teacher on purpose - they are not "unresolved". #}
+{% set unresolved = rows | rejectattr('teacher') | rejectattr('manual') | list %}
+{% set logged = rows | selectattr('actual_minutes') | list %}
+<div class="tiles">
+  <div class="tile">
+    <div class="n">{{ live | length }}</div>
+    <div class="k">preps tracked</div>
+  </div>
+  <div class="tile">
+    <div class="n">{{ (sessions | sum(attribute='minutes') / 60) | round(1) }}<span
+      style="font-size:.9rem;font-weight:500"> h</span></div>
+    <div class="k">scheduled</div>
+  </div>
+  <div class="tile">
+    <div class="n">{{ logged | length }}</div>
+    <div class="k">times logged</div>
+  </div>
+  <div class="tile">
+    <div class="n">{{ global_mean | round | int if global_mean else '—' }}{% if global_mean %}<span
+      style="font-size:.9rem;font-weight:500"> min</span>{% endif %}</div>
+    <div class="k">your average prep</div>
+  </div>
+</div>
+
+{% if to_confirm %}
+<h2>Did you do these?</h2>
+<div class="card">
+  {% for s in to_confirm %}
+    <div class="slot">
+      <span class="t">{{ s['start_local'] | dmy }}–{{ s['end_local'][11:16] }}</span>
+      <span>{{ s['label'] }}</span>
+      <span class="who">{{ s['teacher'] or '' }}</span>
+      <form class="inline" method="post" action="{{ p }}/session/{{ s['uid'] }}/done">
+        {{ tok() }}<button type="submit">Done</button>
+      </form>
+      <form class="inline" method="post" action="{{ p }}/session/{{ s['uid'] }}/missed">
+        {{ tok() }}<button type="submit">Missed</button>
+      </form>
+    </div>
+  {% endfor %}
+  <div class="hint" style="margin-top:.5rem">
+    Each counts as done until {{ grace_hours | round | int }} hours after it
+    ended{% if to_confirm %} (the first at
+    {{ confirm_by[to_confirm[0]['uid']] | dmy }}){% endif %}. After that, one
+    you haven't confirmed counts as missed and its time is booked again before
+    the deadline. Logging how long the whole prep took confirms all of them.
+  </div>
+</div>
+{% endif %}
+
+{% if teams_session and not teams_session.ok %}
+<h2>Teams sign-in</h2>
+<div class="card">
+  <span class="conf {{ 'conf-critical' if teams_session.persistent is not true
+                       else 'conf-shrunk' }}">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"
+         stroke-linecap="round" aria-hidden="true">
+      <path d="M8 4.5v4"/><circle cx="8" cy="11.5" r=".6" fill="currentColor"/>
+      <path d="M8 1.5 1.5 13.5h13z"/>
+    </svg>
+    {{ 'Needs attention' if teams_session.persistent is not true else 'Expiring' }}
+  </span>
+  <div style="margin-top:.6rem">{{ teams_session.summary }}</div>
+  <div class="hint" style="margin-top:.5rem">
+    Fix it at the machine, or over VNC:
+    <code>python3 -m prep.login --config config.yaml</code>
+    <br>
+    You sign in on Microsoft's own page. <strong>This dashboard will never ask
+    for your school username or password</strong> &mdash; if a page claiming to
+    be this one does, it is not this one.
+  </div>
+</div>
+{% endif %}
+
+{% if unresolved %}
+<h2>Needs a teacher</h2>
+<div class="card empty">
+  {{ unresolved | length }} prep(s) have no teacher, so their times can't improve
+  anyone's estimate. Run <code>python3 -m prep.identify</code> to name them.
+</div>
+{% endif %}
+
+<h2>Add a task</h2>
+<div class="card">
+  <form class="task-form" method="post" action="{{ p }}/task">
+    {{ tok() }}
+    <label class="wide">What
+      <input type="text" name="title" required maxlength="200"
+             placeholder="e.g. EPQ reading, revise for mock, UCAS statement draft">
+    </label>
+    <label>Due
+      <input type="date" name="due_date" required min="{{ today }}">
+    </label>
+    <label>Due time (optional)
+      <input type="time" name="due_time">
+    </label>
+    <label>Start from (optional)
+      <input type="date" name="start_date" min="{{ today }}">
+    </label>
+    <label>Minutes (optional)
+      <input type="number" name="minutes" min="1" max="1440" placeholder="estimate it">
+    </label>
+    <label>Teacher (optional)
+      <select name="teacher">
+        <option value="">— my own task —</option>
+        {% for t in teachers %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit">Add and schedule</button>
+  </form>
+  <p class="empty" style="margin:.7rem 0 0">
+    Booked around lessons and everything else in your diary, the same as prep.
+    Leave minutes empty to have it estimated. Pick a teacher only if they set it
+    &mdash; then its time teaches their estimate; otherwise it stays out of
+    every average.</p>
+</div>
+
+{% if backlog %}
+<h2>Backlog</h2>
+<div class="card notice" style="margin-bottom:.5rem">
+  Saved, but nothing booked yet &mdash; there was no free time before the
+  deadline, or the calendar couldn't be reached. Move the deadline, free up an
+  evening, or correct the minutes, then press Reschedule.
+</div>
+{% for row in backlog %}{{ prep_card(row) }}{% endfor %}
+{% endif %}
+
+<h2>Upcoming prep</h2>
+{% for row in rows %}
+{{ prep_card(row) }}
+{% else %}
+  <div class="card empty">Nothing captured yet.</div>
+{% endfor %}
+
+<h2>Is the prediction any good?</h2>
+{% if calibration %}
+  {% set scale = [calibration | map(attribute='mean_predicted') | max,
+                  calibration | map(attribute='mean_actual') | max] | max %}
+  <div class="card">
+    <div class="legend">
+      <span><span class="swatch" style="background: var(--series-est)"></span>predicted</span>
+      <span><span class="swatch" style="background: var(--series-actual)"></span>actually took</span>
+    </div>
+    <div class="cal">
+      {% for c in calibration %}
+        {% set over = c['mean_predicted'] - c['mean_actual'] %}
+        <div class="name">{{ c['teacher'] }}</div>
+        <div class="track">
+          <div class="bar bar-est"
+               style="width: {{ (c['mean_predicted'] / scale * 100) | round(1) }}%"
+               title="predicted {{ c['mean_predicted'] | round | int }} min on average"></div>
+          <div class="bar bar-actual"
+               style="width: {{ (c['mean_actual'] / scale * 100) | round(1) }}%"
+               title="actually took {{ c['mean_actual'] | round | int }} min on average"></div>
+        </div>
+        <div class="num">
+          {{ c['mean_predicted'] | round | int }} / {{ c['mean_actual'] | round | int }}
+          <span class="sub">{% if over > 5 %}over by {{ over | round | int
+            }}{% elif over < -5 %}under by {{ -over | round | int
+            }}{% else %}close{% endif %} · n={{ c['n'] }}</span>
+        </div>
+      {% endfor %}
+    </div>
+    <p class="empty" style="margin:.7rem 0 0">
+      Typical minutes (median), predicted against what it really took. One odd
+      evening won't skew this, for the same reason it won't skew the estimate.</p>
+  </div>
+{% else %}
+  <div class="card empty">
+    No times logged against a predicted prep yet, so there is nothing to compare.
+    Log two or three and this fills in.
+  </div>
+{% endif %}
+
+<h2>When you can't work</h2>
+<div class="card">
+  {% if blackouts %}
+    <div class="table-scroll"><table>
+      <tr><th>When</th><th>Time</th><th>Why</th><th>Where</th><th></th></tr>
+      {% for b in blackouts %}
+      <tr>
+        <td>{% if b['on_date'] %}{{ b['on_date'] | dmy }}{% else %}
+            {{ ['Mondays','Tuesdays','Wednesdays','Thursdays','Fridays',
+                'Saturdays','Sundays'][b['weekday']] }}{% endif %}</td>
+        <td>{{ b['start_time'] }}–{{ b['end_time'] }}</td>
+        <td>{{ b['label'] or '' }}</td>
+        <td>{{ b['location'] or '' }}{% if b['location'] and b['travel'] %} ({{ 'car' if b['travel'] == 'car' else 'public transport' }}){% endif %}</td>
+        <td class="num">
+          <form class="inline" method="post"
+                action="{{ p }}/blackout/{{ b['id'] }}/delete">
+            {{ tok() }}<button class="link-btn" type="submit">remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table></div>
+  {% else %}
+    <p class="empty" style="margin-top:0">
+      Nothing blocked out. Add rehearsals, CCF, matches — anything the timetable
+      feed doesn't already know about.</p>
+  {% endif %}
+
+  <form method="post" action="{{ p }}/blackout" class="row-form"
+        style="margin-top:.8rem">
+    {{ tok() }}
+    <label>Repeats
+      <select name="weekday">
+        <option value="">— one-off date —</option>
+        {% for label in ['Every Monday','Every Tuesday','Every Wednesday','Every Thursday',
+                         'Every Friday','Every Saturday','Every Sunday'] %}
+          <option value="{{ loop.index0 }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Date (one-off)
+      <input type="date" name="on_date">
+    </label>
+    <label>From
+      <input type="time" name="start_time" value="19:00" required>
+    </label>
+    <label>Until
+      <input type="time" name="end_time" value="21:00" required>
+    </label>
+    <label class="grow">What
+      <input type="text" name="label" placeholder="what is it">
+    </label>
+    <label class="grow">Where (optional)
+      <input type="text" name="location" placeholder="postcode"
+             autocapitalize="characters" autocomplete="postal-code"
+             title="Leave empty if it is wherever you already are. A postcode or a place from your config makes it somewhere you travel to, and the journey there and back is blocked too.">
+    </label>
+    {% if travel_on %}
+    <label class="full">Getting there
+      <select name="travel">
+        <option value="car" {{ 'selected' if travel_default == 'car' }}>By car</option>
+        <option value="public" {{ 'selected' if travel_default == 'public' }}>By public transport</option>
+      </select>
+    </label>
+    {% endif %}
+    <button type="submit">Block out</button>
+  </form>
+  {% if travel_on %}
+  <p class="empty" style="margin:.5rem 0 0">
+    Give a place and the journey is worked out too: there and back is blocked,
+    and the day is re-routed - stay at school, or go home first - for the most
+    prep time.</p>
+  {% endif %}
+</div>
+
+{% if travel_on %}
+<h2>Something outside school</h2>
+<div class="card">
+  <p class="empty" style="margin-top:0">
+    An instrument lesson, a match, an appointment. It goes into your
+    <strong>{{ personal_calendar }}</strong> calendar, and everything still to
+    come is re-planned around it and the journeys to and from it. You can add
+    these straight into that calendar too - put the postcode in Location.</p>
+  <form method="post" action="{{ p }}/outside" class="row-form">
+    {{ tok() }}
+    <label class="grow">What
+      <input type="text" name="title" placeholder="what is it" required>
+    </label>
+    <label class="full">Date
+      <input type="date" name="on_date" value="{{ today }}" required>
+    </label>
+    <label>From
+      <input type="time" name="start_time" value="18:00" required>
+    </label>
+    <label>Until
+      <input type="time" name="end_time" value="18:45" required>
+    </label>
+    <label class="grow">Where
+      <input type="text" name="location" placeholder="postcode" required
+             autocapitalize="characters" autocomplete="postal-code">
+    </label>
+    <label class="full">Getting there
+      <select name="travel">
+        <option value="car" {{ 'selected' if travel_default == 'car' }}>By car</option>
+        <option value="public" {{ 'selected' if travel_default == 'public' }}>By public transport</option>
+      </select>
+    </label>
+    <button type="submit">Add</button>
+  </form>
+</div>
+{% endif %}
+
+<h2>Scheduled sessions</h2>
+{% if by_day %}
+  {% for day, slots in by_day.items() %}
+    <div class="day">
+      <h3>{{ day | dmy }}</h3>
+      {% for s in slots %}
+        <div class="slot">
+          <span class="t">{{ s['start_local'][11:16] }}–{{ s['end_local'][11:16] }}</span>
+          <span>{{ s['label'] }}</span>
+          <span class="who">{{ s['teacher'] or '' }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="card empty">Nothing scheduled.</div>
+{% endif %}
+
+<script>
+/* Buttons answer at once: the slow part - iCloud, the timetable, re-planning -
+   runs on the server in the background. This page asks how it is getting on
+   and reloads when it is finished, back where you were scrolled to. */
+(function () {
+  var KEY = "prep-scroll";
+  function remember() {
+    try { sessionStorage.setItem(KEY, String(window.scrollY)); } catch (e) {}
+  }
+  try {
+    var y = sessionStorage.getItem(KEY);
+    if (y !== null) {
+      sessionStorage.removeItem(KEY);
+      window.scrollTo(0, parseInt(y, 10) || 0);
+    }
+  } catch (e) {}
+
+  // A tapped button says so, and cannot be sent twice.
+  document.addEventListener("submit", function (event) {
+    if (event.defaultPrevented) { return; }
+    var button = event.submitter || event.target.querySelector("button[type=submit]");
+    if (button) {
+      setTimeout(function () {
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+        if (!button.classList.contains("link-btn")) { button.textContent = "Saving\u2026"; }
+      }, 0);
+    }
+    remember();
+  });
+
+  {% if planning.running %}
+  var url = "{{ p }}/planning{% if token %}?token={{ token }}{% endif %}";
+  var touched = false;
+  document.addEventListener("input", function () { touched = true; });
+  function poll() {
+    fetch(url, {credentials: "same-origin", cache: "no-store"}).then(function (r) {
+      return r.ok ? r.json() : null;
+    }).then(function (state) {
+      if (!state) { return setTimeout(poll, 5000); }
+      if (state.running && state.running.length) {
+        document.getElementById("working-text").textContent =
+          state.running[0] + "\u2026 The page will refresh itself when it is done.";
+        return setTimeout(poll, 2000);
+      }
+      var said = (state.last && state.last.notice) || "Done.";
+      var page = "{{ p }}/?notice=" + encodeURIComponent(said);
+      if (!touched) { remember(); window.location.replace(page); return; }
+      // Halfway through filling in a form: a reload would lose it.
+      var box = document.getElementById("working");
+      box.classList.remove("working");
+      box.textContent = said + " ";
+      var link = document.createElement("a");
+      link.href = page; link.textContent = "Refresh to see the new times";
+      link.addEventListener("click", remember);
+      box.appendChild(link);
+    }).catch(function () { setTimeout(poll, 5000); });
+  }
+  setTimeout(poll, 1200);
+  {% endif %}
+})();
+</script>
+</body>
+</html>

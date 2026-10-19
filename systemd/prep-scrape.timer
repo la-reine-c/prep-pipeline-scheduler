@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the prep scraper hourly, 07:05 to 22:05
+
+[Timer]
+OnCalendar=*-*-* 07..22:05
+# If the machine was off at the scheduled time, run on the next boot.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

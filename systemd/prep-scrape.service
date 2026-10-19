@@ -1,0 +1,25 @@
+[Unit]
+Description=Prep scraper and scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Replace PREP_USER and PREP_HOME before installing - see LINUX.md
+User=PREP_USER
+WorkingDirectory=PREP_HOME
+EnvironmentFile=-PREP_HOME/.env
+# Secrets, decrypted by systemd into a private tmpfs only this unit can read.
+# Created by deploy/setup-credentials.sh. Delete these lines and keep
+# EnvironmentFile if you are still using .env.
+LoadCredentialEncrypted=ICLOUD_USER:/etc/prep/creds/icloud-user.cred
+LoadCredentialEncrypted=ICLOUD_APP_PASSWORD:/etc/prep/creds/icloud-app-password.cred
+LoadCredentialEncrypted=SOCS_FEED_URL:/etc/prep/creds/socs-feed-url.cred
+LoadCredentialEncrypted=PREP_WEB_TOKEN:/etc/prep/creds/prep-web-token.cred
+LoadCredentialEncrypted=TELEGRAM_BOT_TOKEN:/etc/prep/creds/telegram-bot-token.cred
+LoadCredentialEncrypted=TELEGRAM_CHAT_ID:/etc/prep/creds/telegram-chat-id.cred
+
+# flock stops two runs overlapping and corrupting the browser profile.
+ExecStart=/usr/bin/flock -n PREP_HOME/run.lock \
+  PREP_HOME/.venv/bin/python -m prep.run --config PREP_HOME/config.yaml
+TimeoutStartSec=900

@@ -1,0 +1,220 @@
+# Secrets: use  cred:NAME  for systemd encrypted credentials (best, see
+# deploy/systemd-creds.md), or  env:NAME  for a variable from .env.
+# Copy to config.yaml and edit. Secrets use env: so they never live in this file.
+
+db_path: ~/prep/prep.sqlite3
+dump_dir: ~/prep/dumps
+export_path: ~/prep/prep.txt
+timezone: Europe/London
+
+teams:
+  # Where the app STARTS. It is not where it ends up: Teams opens on whatever
+  # view it feels like - usually chat - and the address bar does not change
+  # when you reach Assignments, so no URL can take you there. Getting to the
+  # list is a click, which the capture makes for itself.
+  #
+  # Use whichever your tenant actually serves. Open Teams in an ordinary
+  # browser and look at the address bar: teams.microsoft.com redirects to
+  # teams.cloud.microsoft as tenants are migrated. Naming the old one does
+  # not keep you on the old origin, it just adds a redirect hop.
+  assignments_url: "https://teams.cloud.microsoft/v2/#/edu/assignments"
+  # assignments_url: "https://teams.microsoft.com/v2/#/edu/assignments"
+  url_hints: ["assignment", "edu/api", "assignmentservice"]
+
+  # What the app is called in the rail, for the click that gets there. Leave
+  # empty unless your school has renamed it: empty matches anything with
+  # "assignment" in its accessible name. A tenant that calls it Classwork has
+  # no Assignments link to find, and that failure looks exactly like a dead
+  # session.
+  #   assignment_labels: ["Assignments", "Classwork"]
+  assignment_labels: []
+
+  # Teams renews its own access in a hidden iframe pointed at
+  # login.microsoftonline.com, which is a THIRD PARTY to the Teams page
+  # around it. With third-party cookies blocked that renewal fails silently:
+  # signing in works, prep appears, and then a few days later every run
+  # reports a dead session while the cookie in the profile is still valid.
+  # Signing in again buys another few days, which is what hides the cause.
+  #
+  # This writes the same setting the browser's own Settings page writes, into
+  # this one profile, before Chromium starts. Turn it off only to reproduce
+  # the failure deliberately.
+  third_party_cookies: true
+  profile_dir: ~/prep/profile
+  # Empty = Playwright's own build (python -m playwright install --with-deps
+  # chromium) - right for Ubuntu, whose apt has no Chromium. The snap works
+  # too (/snap/bin/chromium) but only with profile_dir as a plain folder in
+  # your home directory: not /tmp, not ~/.hidden. It is refused otherwise.
+  chromium_path: ""
+  headless: true
+  # How long to wait for assignments to finish arriving. Teams loads them
+  # progressively, so this is not a fixed wait: it waits at least settle_ms,
+  # then keeps going until nothing new has arrived for quiet_ms, scrolling to
+  # make a virtualised list fetch the rest, and gives up at max_settle_ms.
+  #
+  # If the count looks short, raise max_settle_ms and quiet_ms rather than
+  # settle_ms - the problem is almost always stopping too early, not starting
+  # too late. python3 -m prep.diagnose shows you which.
+  settle_ms: 8000
+  quiet_ms: 5000
+  max_settle_ms: 60000
+  # A FLOOR, not a ceiling. Teams virtualises the assignment list: what has
+  # never been scrolled into view has never been fetched, so a capture that
+  # stops scrolling early is short by exactly the prep you cannot see. The
+  # capture scrolls at least this many times and then keeps going while the
+  # page still moves under it, stopping when the list will not scroll any
+  # further. max_settle_ms is what ultimately bounds it.
+  scroll_passes: 8
+  block_resources: ["image", "media", "font"]
+
+  # Software rendering. Leave this on unless you have a reason not to.
+  # The symptom it fixes is a Chromium window that opens and then stays
+  # blank: Chromium has decided it has a GPU, handed rendering to it, and
+  # got nothing back. Common on VMs, on a headless desktop, and on a Mac's
+  # GPU under Linux. Nothing here is fast enough to notice the difference.
+  disable_gpu: true
+
+  # --no-sandbox. Omit this and it is added only when running as root, which
+  # is the only case Chromium needs it. It is a real reduction in isolation -
+  # the sandbox is what stops a page reaching the rest of the machine - and
+  # Chromium warns about it in a banner across the window, correctly. The
+  # better fix for that warning is to run as a normal user, not to silence it.
+  #   no_sandbox: false   # never add it, even as root (Chromium then refuses)
+  #   no_sandbox: true    # always add it
+
+  # Anything else to pass to Chromium. Rarely needed. If a blank window
+  # survives disable_gpu, the next thing to try is forcing software GL:
+  #   browser_args: ["--use-gl=angle", "--use-angle=swiftshader"]
+  # (version-sensitive, which is why it is not a default)
+  browser_args: []
+
+# Subscribed ICS calendars. These are INVISIBLE to CalDAV - a calendar you
+# subscribed to from a link lives on the device, not in iCloud - so the Pi
+# fetches them directly. Without this the scheduler cannot see your lessons.
+# The URL usually contains a personal key: treat it as a credential and keep
+# it in .env, never in a file you commit.
+feeds:
+  socs: env:SOCS_FEED_URL
+feed_cache_dir: ~/prep/feed-cache
+
+calendar:
+  caldav_url: "https://caldav.icloud.com/"
+  username: env:ICLOUD_USER
+  password: env:ICLOUD_APP_PASSWORD
+  prep_calendar: "Prep-Pi-Test"   # must already exist in the Calendar app
+  personal_calendar: "Personal"   # outside lessons etc; the dashboard adds to it
+  ignore_calendars: ["US Holidays", "Birthdays"]
+
+estimator:
+  per_day_minutes: 30      # the min(30d, 120) rule
+  cap_minutes: 120
+  shrinkage_k: 3           # how hard to pull a teacher's mean towards the global mean
+  min_minutes: 15
+
+scheduling:
+  block_minutes: 30
+  max_daily_minutes: 120   # total prep in any one day, across every subject
+  flow_buffer_minutes: 5   # added to second and later sittings of the same prep
+  gap_minutes: 10          # breathing room either side of anything in the diary
+  max_sitting_minutes: 60  # back-to-back blocks of one prep merge into a sitting this long
+  prep_gap_minutes: 5      # break between two prep sittings (gap_minutes is for diary events)
+  min_block_minutes: 15    # shortest sitting: uses the ends of evenings and of estimates
+  # Working late costs more the later it gets. From late_from, each step is
+  # used only when everything earlier before the deadline is already full:
+  # 20:00-21:00 before 21:00-22:00. Remove late_from for no penalty.
+  late_from: "20:00"
+  late_step_minutes: 60
+  due_time: "08:30"        # prep must be finished by this time on the due date
+  # How long after a session ends you have to tick it Done or Missed on the
+  # dashboard. Until then it counts as done; after it, it counts as missed
+  # and the time is booked again before the deadline (prep.recheck).
+  confirm_grace_hours: 24
+  windows:
+    monday:    {start: "17:00", end: "22:00"}
+    tuesday:   {start: "17:00", end: "22:00"}
+    wednesday: {start: "17:00", end: "22:00"}
+    thursday:  {start: "17:00", end: "22:00"}
+    friday:    {start: "17:00", end: "22:00"}
+    saturday:  {start: "09:30", end: "22:00"}
+    sunday:    {start: "09:30", end: "22:00"}
+
+  # Who teaches what is NOT configured here. Run this instead, once:
+  #
+  #     python3 -m prep.setup --config config.yaml --set-teachers
+  #
+  # It lists the people who have actually set you prep - each with their id
+  # and a few of their prep titles - and you name them one at a time. The
+  # answers go to the file named by learned_map_path (default
+  # ~/prep/teachers.json), which is the one file to copy between machines.
+  #
+  # Keeping them out of this file matters: every class is shared between at
+  # least two teachers, so the thing that identifies who set a prep is the
+  # creator id on the assignment, not the class and not a word in the title.
+  # A keyword list cannot express that.
+  #
+  # This is only a last-resort fallback, for a tenant that sends neither a
+  # creator nor a usable class id. Leave it empty unless prep.setup has
+  # failed you.
+  teacher_keywords: {}
+
+web:
+  host: "0.0.0.0"
+  port: 8477               # check it is free: lsof -nP -iTCP -sTCP:LISTEN
+  token: env:PREP_WEB_TOKEN
+  # Only needed if another service already owns this port's root.
+  # url_prefix: "/prep"
+
+notify:
+  # Configure any or all. A failure is sent on every channel at once.
+  ntfy_topic: ""           # e.g. prep-9f2c7a1b4e - keep it unguessable
+  ntfy_server: "https://ntfy.sh"
+
+  email:
+    host: smtp.gmail.com
+    port: 587
+    username: env:ALERT_EMAIL_USER      # your Gmail address
+    password: env:ALERT_EMAIL_APP_PW    # a Gmail APP PASSWORD, not your login
+    to: env:ALERT_EMAIL_TO
+
+  # Phone alerts on Linux. Free and instant. See LINUX.md for getting a bot
+  # token from @BotFather and finding your chat id.
+  telegram:
+    bot_token: env:TELEGRAM_BOT_TOKEN
+    chat_id: env:TELEGRAM_CHAT_ID
+
+  # A problem that persists across runs alerts once and stays quiet until a
+  # later run finds it fixed; then the Telegram alert is edited to say so.
+  state_path: ~/prep/alerts.json
+
+# Where you are during the day, and how long journeys take. Prep happens at
+# home or at school - never in transit, never at a lesson. Each day is routed:
+# between two commitments it compares staying put, going home and staying at
+# school, and keeps whichever leaves the most usable prep time.
+travel:
+  home:
+    postcode: "EC1A 1BB"
+  school:
+    name: "Example School"
+    postcode: "SW1A 0AA"
+    calendars: ["Timetable", "Exams"]   # every event in these is at school
+    feeds: [socs]                       # ...and in these feeds
+    work_until: "19:00"                 # can stay working at school until
+  # Other places you go regularly. An event whose LOCATION contains a postcode
+  # needs no entry here; one that only names a place does.
+  #   piano:
+  #     name: "Piano lesson"
+  #     postcode: "EC1A 9AA"
+  #     match: ["piano", "mrs smith"]
+  places: {}
+  times:                    # by PUBLIC TRANSPORT, door to door, either direction
+    home-school: 75
+  car_times: {}             # the same by car, e.g. "home-EC1A 9AA": 20
+  # How you get to and from outside commitments that do not say (on the
+  # dashboard, or "by car" / "(bus)" in the event), and the school run.
+  default_mode: car         # car | public
+  school_mode: public
+  car_overhead_minutes: 5   # fixed part of an estimated drive
+  lookup_postcodes: true    # api.postcodes.io - only the postcode is sent
+  overhead_minutes: 15      # fixed part of any estimated journey
+  unknown_minutes: 60       # a place that cannot be located
+  cache_path: ~/prep/places.json

@@ -1,0 +1,55 @@
+[Unit]
+Description=Prep dashboard (gunicorn behind nginx)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=PREP_USER
+WorkingDirectory=PREP_HOME
+EnvironmentFile=-PREP_HOME/.env
+# Secrets, decrypted by systemd into a private tmpfs only this unit can read.
+# Created by deploy/setup-credentials.sh. Delete these lines and keep
+# EnvironmentFile if you are still using .env.
+LoadCredentialEncrypted=ICLOUD_USER:/etc/prep/creds/icloud-user.cred
+LoadCredentialEncrypted=ICLOUD_APP_PASSWORD:/etc/prep/creds/icloud-app-password.cred
+LoadCredentialEncrypted=SOCS_FEED_URL:/etc/prep/creds/socs-feed-url.cred
+LoadCredentialEncrypted=PREP_WEB_TOKEN:/etc/prep/creds/prep-web-token.cred
+
+
+# Bound to the loopback on purpose. nginx terminates TLS and proxies here, so
+# nothing should reach gunicorn from the network directly - and if nginx is
+# ever down, the dashboard is unreachable rather than quietly served without
+# TLS.
+Environment=PREP_CONFIG=PREP_HOME/config.yaml
+ExecStart=PREP_HOME/.venv/bin/gunicorn \
+    --bind 127.0.0.1:8080 \
+    --workers 2 \
+    --timeout 120 \
+    --access-logfile - \
+    --error-logfile - \
+    "prep.web:from_env()"
+
+Restart=on-failure
+RestartSec=10
+
+# It needs its own data and the browser profile, and nothing else.
+#
+# ProtectHome=read-only makes everything outside these paths read-only, and
+# the database lives wherever db_path says - ~/prep by default, which is not
+# PREP_HOME if the code was unpacked somewhere else. Without the second path
+# the page still loads, and every write - logging a time, adding a task -
+# fails with "attempt to write a readonly database". The leading "-" means
+# "fine if it does not exist".
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=PREP_HOME -/home/PREP_USER/prep
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target
