@@ -20,9 +20,10 @@ set -euo pipefail
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PREP_HOME="${HOME}/prep"
 HOST=""
-CERT="selfsigned"
+CERT="cloudflare"
 LAN_IP=""
 WEB_PORT="8080"
+TUNNEL_PORT="8088"
 PREP_CALENDAR=""
 TEACHERS=""
 ENCRYPT=0
@@ -72,14 +73,19 @@ Your config
 The dashboard over HTTPS
   --host NAME            name on the certificate, and what you type in the
                          browser (default: the Tailscale name with --cert
-                         tailscale, otherwise this machine's hostname)
-  --cert MODE            selfsigned (default) | tailscale | existing | none
+                         tailscale, otherwise this machine's hostname). With
+                         --cert cloudflare: the tunnel's public hostname
+  --cert MODE            cloudflare (default) | selfsigned | tailscale | existing | none
+                           cloudflare  Cloudflare Tunnel: reachable anywhere, no
+                                       open ports, Cloudflare's certificate. Reads
+                                       CLOUDFLARE_TUNNEL_TOKEN from .env or asks
                            selfsigned  make one in ${CERT_DIR}; browsers warn
                            tailscale   a real certificate for your *.ts.net name
                            existing    use ${CERT_DIR}/{fullchain,privkey}.pem
                            none        no nginx; dashboard on the loopback only
   --lan-ip IP            address to put in a self-signed certificate
                          (default: detected)
+  --tunnel-port PORT     loopback port nginx serves the tunnel on (default: 8088)
   --install-tailscale    install Tailscale and run 'tailscale up --ssh' first
 
 Secrets
@@ -111,6 +117,7 @@ while [[ $# -gt 0 ]]; do
         --host)             HOST="$2"; shift 2 ;;
         --cert)             CERT="$2"; shift 2 ;;
         --lan-ip)           LAN_IP="$2"; shift 2 ;;
+        --tunnel-port)      TUNNEL_PORT="$2"; shift 2 ;;
         --install-tailscale) INSTALL_TAILSCALE=1; shift ;;
         --encrypt-secrets)  ENCRYPT=1; shift ;;
         --force-timers)     FORCE_TIMERS=1; shift ;;
@@ -124,10 +131,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "${CERT}" in
-    selfsigned|tailscale|existing|none) ;;
-    *) echo "--cert must be selfsigned, tailscale, existing or none" >&2; exit 2 ;;
+    cloudflare|selfsigned|tailscale|existing|none) ;;
+    *) echo "--cert must be cloudflare, selfsigned, tailscale, existing or none" >&2; exit 2 ;;
 esac
 [[ "${WEB_PORT}" =~ ^[0-9]+$ ]] || { echo "--web-port must be a number" >&2; exit 2; }
+[[ "${TUNNEL_PORT}" =~ ^[0-9]+$ ]] || { echo "--tunnel-port must be a number" >&2; exit 2; }
 for name in ${ONLY//,/ } ${SKIP//,/ }; do
     [[ " ${STEPS[*]} " == *" ${name} "* ]] \
         || { echo "unknown step '${name}' - steps are: ${STEPS[*]}" >&2; exit 2; }
@@ -274,7 +282,14 @@ do_preflight() {
         else
             ok "port ${WEB_PORT} is free (or already ours)"
         fi
-        if [[ "${CERT}" != "none" ]]; then
+        if [[ "${CERT}" == "cloudflare" ]]; then
+            holder="$("${ss_cmd[@]}" "sport = :${TUNNEL_PORT}" 2>/dev/null || true)"
+            if [[ -n "${holder}" && "${holder}" != *nginx* ]]; then
+                warn "port ${TUNNEL_PORT} is already in use:"
+                info "${holder}"
+                [[ ${DRY_RUN} -eq 1 ]] || fail "pick a free one with --tunnel-port"
+            fi
+        elif [[ "${CERT}" != "none" ]]; then
             holder="$("${ss_cmd[@]}" 'sport = :443' 2>/dev/null || true)"
             if [[ -n "${holder}" && "${holder}" != *nginx* ]]; then
                 warn "port 443 is held by something other than nginx:"
@@ -301,6 +316,18 @@ do_packages() {
         fi
         info "Sign in with a PERSONAL account, never your school one."
         run sudo tailscale up --ssh
+    fi
+    if [[ "${CERT}" == "cloudflare" ]]; then
+        if command -v cloudflared >/dev/null; then
+            ok "cloudflared already installed"
+        else
+            # Cloudflare's own repository: Ubuntu does not package cloudflared.
+            run sudo mkdir -p --mode=0755 /usr/share/keyrings
+            run_sh "curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null"
+            run_sh "echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' | sudo tee /etc/apt/sources.list.d/cloudflared.list >/dev/null"
+            run sudo apt-get update
+            run sudo apt-get install -y cloudflared
+        fi
     fi
 }
 
@@ -648,6 +675,10 @@ do_nginx() {
         info "http://127.0.0.1:${WEB_PORT}/"
         return
     fi
+    if [[ "${CERT}" == "cloudflare" ]]; then
+        do_tunnel
+        return
+    fi
     detect_host
     step "HTTPS: certificate and nginx for ${HOST}"
     run sudo mkdir -p "${CERT_DIR}"
@@ -707,6 +738,69 @@ do_nginx() {
     ok "nginx serving https://${HOST}/"
 }
 
+# The token that ties this machine to a tunnel made in the Cloudflare
+# dashboard. Never on the command line or in the printed commands: anyone
+# holding it can serve their own site under your hostname.
+tunnel_token() {
+    if [[ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
+        printf '%s' "${CLOUDFLARE_TUNNEL_TOKEN}"
+        return
+    fi
+    local env_file value
+    for env_file in "${PREP_HOME}/.env" "${SRC}/.env"; do
+        [[ -f "${env_file}" ]] || continue
+        value="$(set -a; . "${env_file}"; printf '%s' "${CLOUDFLARE_TUNNEL_TOKEN:-}")"
+        if [[ -n "${value}" ]]; then
+            printf '%s' "${value}"
+            return
+        fi
+    done
+}
+
+do_tunnel() {
+    step "Cloudflare Tunnel: nginx on 127.0.0.1:${TUNNEL_PORT}, cloudflared to Cloudflare"
+    echo "   ${DIM}\$ render deploy/nginx-prep-tunnel.conf > /etc/nginx/sites-available/prep${RESET}"
+    if [[ ${DRY_RUN} -eq 0 ]]; then
+        sed -e "s/TUNNEL_PORT/${TUNNEL_PORT}/g" -e "s|127.0.0.1:8080|127.0.0.1:${WEB_PORT}|g" \
+            "${SRC}/deploy/nginx-prep-tunnel.conf" | sudo tee /etc/nginx/sites-available/prep >/dev/null
+    fi
+    run sudo ln -sf /etc/nginx/sites-available/prep /etc/nginx/sites-enabled/prep
+    run sudo rm -f /etc/nginx/sites-enabled/default
+    run sudo nginx -t
+    run sudo systemctl enable nginx
+    run sudo systemctl reload-or-restart nginx
+    ok "nginx serving the tunnel origin on http://127.0.0.1:${TUNNEL_PORT}/ (loopback only)"
+
+    if [[ ${DRY_RUN} -eq 0 ]] && systemctl list-unit-files cloudflared.service >/dev/null 2>&1 \
+            && systemctl is-enabled --quiet cloudflared 2>/dev/null; then
+        ok "cloudflared is already installed as a service"
+        return
+    fi
+    local token; token="$(tunnel_token || true)"
+    if [[ -z "${token}" && ${DRY_RUN} -eq 0 && ${ASSUME_YES} -eq 0 && -t 0 ]]; then
+        info "Paste the tunnel token from the Cloudflare dashboard (Zero Trust ->"
+        info "Networks -> Tunnels -> your tunnel), or press Enter to do it later."
+        read -r -s -p "   token: " token
+        echo
+    fi
+    if [[ -z "${token}" ]]; then
+        if [[ ${DRY_RUN} -eq 1 ]]; then
+            echo "   ${DIM}\$ sudo cloudflared service install <tunnel token>${RESET}"
+        else
+            warn "no tunnel token: the dashboard is reachable from this machine only, for now"
+            later "Connect the Cloudflare Tunnel: put CLOUDFLARE_TUNNEL_TOKEN=... in ${PREP_HOME}/.env and run ./install.sh --only nginx (README.md, 'Cloudflare Tunnel')"
+        fi
+        return
+    fi
+    echo "   ${DIM}\$ sudo cloudflared service install <tunnel token>${RESET}"
+    if [[ ${DRY_RUN} -eq 0 ]]; then
+        sudo cloudflared service install "${token}" || fail "cloudflared service install failed - check the token"
+    fi
+    ok "cloudflared is running as a service and connects out to Cloudflare"
+    info "In the Cloudflare dashboard, the tunnel's public hostname must point at"
+    info "http://localhost:${TUNNEL_PORT}. Put Cloudflare Access in front of it."
+}
+
 do_finish() {
     step "Checking it all works"
     if [[ ${DRY_RUN} -eq 1 ]]; then
@@ -723,7 +817,18 @@ do_finish() {
         else
             warn "nothing on http://127.0.0.1:${WEB_PORT}/healthz yet (it can take a few seconds)"
         fi
-        if [[ "${CERT}" != "none" ]]; then
+        if [[ "${CERT}" == "cloudflare" ]]; then
+            if curl -fsS "http://127.0.0.1:${TUNNEL_PORT}/healthz" >/dev/null 2>&1; then
+                ok "and through nginx on the tunnel port"
+            else
+                warn "http://127.0.0.1:${TUNNEL_PORT}/healthz did not answer through nginx"
+            fi
+            if systemctl is-active --quiet cloudflared 2>/dev/null; then
+                ok "cloudflared is connected"
+            else
+                warn "cloudflared is not running (no token yet, or: journalctl -u cloudflared -n 50)"
+            fi
+        elif [[ "${CERT}" != "none" ]]; then
             detect_host
             if curl -fsSk --resolve "${HOST}:443:127.0.0.1" "https://${HOST}/healthz" >/dev/null 2>&1; then
                 ok "and through nginx over HTTPS"
@@ -748,6 +853,9 @@ do_finish() {
     echo "${BOLD}Dashboard${RESET}"
     if [[ "${CERT}" == "none" ]]; then
         info "http://127.0.0.1:${WEB_PORT}/?token=${token:-<your token>}"
+    elif [[ "${CERT}" == "cloudflare" ]]; then
+        info "https://${HOST:-<your tunnel hostname>}/?token=${token:-<your token>}"
+        info "(on this machine: http://127.0.0.1:${TUNNEL_PORT}/?token=...)"
     else
         detect_host
         info "https://${HOST}/?token=${token:-<your token>}"
@@ -775,6 +883,7 @@ echo "${BOLD}prep pipeline installer${RESET}"
 info "from:  ${SRC}"
 info "into:  ${PREP_HOME}"
 info "https: ${CERT}${HOST:+ (${HOST})}, dashboard on 127.0.0.1:${WEB_PORT}"
+[[ "${CERT}" == "cloudflare" ]] && info "tunnel origin: nginx on 127.0.0.1:${TUNNEL_PORT}"
 [[ ${DRY_RUN} -eq 1 ]] && info "${YELLOW}dry run: commands are printed, not run${RESET}"
 
 for name in "${STEPS[@]}"; do

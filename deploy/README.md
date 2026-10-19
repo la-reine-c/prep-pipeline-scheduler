@@ -18,6 +18,8 @@ rather than quietly served without TLS.
 ## 1. The certificate
 
 This is the step that stalls people, so pick by how you reach the machine.
+With a Cloudflare Tunnel (the installer's default) there is no certificate to
+make here at all; Cloudflare's covers you.
 
 ### Tailscale — easiest, and a real certificate
 
@@ -38,13 +40,20 @@ The dashboard is then reachable only from your own devices, and your phone
 counts. **Do not run Tailscale on the school network** — that is the VPN
 clause in the AUP. On your home machine it is fine.
 
-### Cloudflare Tunnel — reachable anywhere, certificate handled for you
+### Cloudflare Tunnel — the default: reachable anywhere, certificate handled for you
 
 `cloudflared` makes an outbound connection, so no inbound port is opened and
 your home IP is never published. Cloudflare terminates TLS at their edge,
 which means **they can see the traffic** — for a homework diary that is a
 reasonable trade, but it is a real one and you should make it knowingly.
 Put Cloudflare Access in front so the tunnel is not open to the world.
+
+There is no certificate to manage on this machine: nginx uses
+`nginx-prep-tunnel.conf`, which listens on `127.0.0.1:8088` in plain HTTP
+(only `cloudflared` can reach it) and keeps the rate limits and the
+token-free log. `install.sh` does all of this by default; the dashboard
+steps (creating the tunnel, its public hostname, and Access) are in
+`INSTALL.md` under "Cloudflare Tunnel (the default)".
 
 ### Self-signed — LAN only
 
