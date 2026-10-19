@@ -190,11 +190,11 @@ The session will occasionally die while you are somewhere else. The answer is
 to reach the machine's screen, not to re-type your password into something
 else:
 
-1. **Tailscale on the mini and on your phone.** Fine under the AUP on your own
-   home machine — but never on the school network.
-2. **A VNC server on the mini** (`x11vnc`, or your desktop's built-in screen
-   sharing), reachable only over the Tailscale address, never the open
-   internet.
+1. **The Cloudflare Tunnel** the installer sets up, with Cloudflare Access in
+   front so only you can get through it.
+2. **A VNC server on the machine** (`x11vnc` with noVNC), bound to the
+   loopback and reached only through the tunnel at `/screen/`, never
+   directly from the internet (`deploy/remote-access.md`).
 3. From your phone, connect and run `python3 -m prep.login --config
    config.yaml`. You sign in **on Microsoft's own page**, in the real browser,
    on the machine that needs the session.

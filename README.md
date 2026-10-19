@@ -50,7 +50,7 @@ installer reference is [INSTALL.md](INSTALL.md); the technical design is
 | An **iCloud account with two-factor authentication** and an **app-specific password** | bookings are written over CalDAV, which doesn't accept your normal Apple password. Make one at appleid.apple.com → Sign-In and Security → App-Specific Passwords |
 | Two iCloud calendars: one for prep (e.g. **Prep**) and one called **Personal** | prep is booked into the first; the dashboard adds your other commitments to the second. Create both in the Calendar app first |
 | Your **timetable as an ICS feed URL** | so prep is never booked over lessons. The setting is called `feeds.socs`, but any ICS link works. Without it the scheduler refuses to book |
-| **For remote access (the default): a Cloudflare account and a domain** whose DNS is on Cloudflare | the dashboard is served through a Cloudflare Tunnel. The free plan is enough, but you need a domain. Don't have one? Use `--cert selfsigned` (home network only) or `--cert tailscale` |
+| **For remote access (the default): a Cloudflare account and a domain** whose DNS is on Cloudflare | the dashboard is served through a Cloudflare Tunnel. The free plan is enough, but you need a domain. Don't have one? Use `--cert selfsigned` (home network only) |
 | Optional: a **Gmail app password** or a **Telegram bot** | alerts when something breaks (e.g. the Teams sign-in has expired) |
 
 UK-specific: travel times between places are worked out from **UK

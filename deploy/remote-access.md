@@ -1,4 +1,4 @@
-# Reaching the mini from your phone
+# Reaching the machine from your phone
 
 The reason signing in feels painful is not the signing in — it is getting to
 the machine. Fix that and re-authenticating becomes a thing you do from the
@@ -8,37 +8,26 @@ Two pieces. Set them up once.
 
 ---
 
-## 1. Tailscale — a private network your phone is on
+## 1. The Cloudflare Tunnel, and SSH through it
 
-```bash
-# on the mini
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up --ssh
-```
+`install.sh` already connects a Cloudflare Tunnel for the dashboard
+(`INSTALL.md`, "Cloudflare Tunnel (the default)"). The same tunnel can carry
+SSH, so you need no port forwarding and nothing is exposed directly.
 
-Then install Tailscale on your phone and sign in **with a personal account,
-not your school one** — the AUP forbids school usernames on third-party
-sites. Your phone and the mini can now reach each other from anywhere, with
-no port forwarding and nothing exposed to the internet.
+In the Cloudflare dashboard, on your tunnel:
 
-**Never run Tailscale on the school network.** That is the VPN clause. On
-your home machine and your phone's mobile data it is fine.
+1. **Add a public hostname**, e.g. `ssh.your-domain.com`, service type
+   **SSH**, URL **`localhost:22`**.
+2. **Zero Trust → Access → Applications → Add → Self-hosted** for
+   `ssh.your-domain.com`, with a policy allowing only your own email address
+   (a **personal** one, not your school one: the AUP forbids school usernames
+   on third-party sites).
+3. In that application's settings, turn on **browser rendering → SSH**.
 
-### `--ssh` is the part that matters
-
-Tailscale SSH means **no keys to generate, copy or lose**. Authentication is
-your Tailscale identity, access is controlled by ACLs you can change from the
-admin console, and it is revocable centrally — if your phone is lost, you
-remove that device and its access is gone immediately.
-
-From your phone, any SSH client (Termius, Blink, Prompt) connects with just:
-
-```
-ssh user@prep-mini
-```
-
-There is also a browser-based console in the Tailscale admin UI, so you can
-get a shell with no app installed at all.
+Then `https://ssh.your-domain.com` in your phone's browser asks for a
+one-time code by email and opens a terminal on the machine. No app and no
+keys to copy. If your phone is lost, remove its sessions in Zero Trust and
+its access is gone.
 
 ---
 
@@ -46,7 +35,7 @@ get a shell with no app installed at all.
 
 SSH is enough for everything except signing into Teams, which needs a real
 browser window because you type into **Microsoft's own page**. For that you
-need to see the mini's screen.
+need to see the machine's screen.
 
 **Ubuntu first: turn Wayland off.** Ubuntu 24.04's desktop runs on Wayland,
 and x11vnc can only see an X11 session — on Wayland it shows a black screen
@@ -76,11 +65,11 @@ your own session is usually `:1`, so `:0` would show you the login screen.
 `-auth guess` finds the session's X authority, which is what lets this work
 when started over SSH.
 
-Both bind the loopback only, so they are reachable *just* through nginx, which
-already terminates TLS. Add to your nginx server block:
+Both bind the loopback only, so they are reachable *just* through nginx and
+the tunnel. Add to the server block in `/etc/nginx/sites-available/prep`:
 
 ```nginx
-    # The mini's screen, for signing into Teams. Same token as the dashboard.
+    # The machine's screen, for signing into Teams. Same token as the dashboard.
     location /screen/ {
         limit_req zone=prep_login burst=5 nodelay;
         proxy_pass http://127.0.0.1:6080/;
@@ -96,15 +85,15 @@ The VNC password set above (`-usepw` makes it required) matters — the nginx
 token is not enough on its own, because a websocket upgrade is not a page load and you want a second
 lock on something that grants full control of the machine.
 
-Then, from your phone: open `https://prep-mini.your-tailnet.ts.net/screen/`,
-see the mini's desktop, run `python3 -m prep.login --config config.yaml` in a
+Then, from your phone: open `https://prep.your-domain.com/screen/`,
+see the machine's desktop, run `python3 -m prep.login --config config.yaml` in a
 terminal on it, and sign in on Microsoft's real page.
 
 ---
 
 ## What this gets you
 
-Re-authenticating stops being "wait until I'm physically at the mini" and
+Re-authenticating stops being "wait until I'm physically at the machine" and
 becomes "tap a link, type my password into Microsoft, done" — from anywhere,
 in about ninety seconds.
 

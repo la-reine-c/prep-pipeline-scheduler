@@ -42,7 +42,6 @@ already done is left alone.
 | A calendar for prep, and one called **Personal**, in iCloud | prep is booked into the first; the dashboard adds outside lessons to the second | create both in the Calendar app first |
 | `teachers.json` from the desktop (optional) | saves naming every teacher again | `--teachers ~/teachers.json` |
 | A Cloudflare account, a domain on it, and a tunnel token | the default way to reach the dashboard from anywhere (see [Cloudflare Tunnel](#cloudflare-tunnel-the-default)) | `CLOUDFLARE_TUNNEL_TOKEN` in `.env`, or paste it when asked |
-| Tailscale on your phone (optional) | an alternative to Cloudflare for reaching the dashboard | `--cert tailscale --install-tailscale` |
 
 > **`config.example.yaml` books into `Prep-Pi-Test`.** That is a test
 > calendar. Pass `--prep-calendar Prep` (or whatever your real one is
@@ -65,9 +64,8 @@ dashboard through a Cloudflare Tunnel and keeps your secrets where
 | `--web-port PORT` | `8080` | the loopback port gunicorn listens on. Change it if the Wake-on-LAN service already holds 8080 |
 | `--cert MODE` | `cloudflare` | how the dashboard is reached over HTTPS (see below) |
 | `--tunnel-port PORT` | `8088` | the loopback port nginx serves the Cloudflare Tunnel on |
-| `--host NAME` | Tailscale name, or this machine's hostname | the name on the certificate, and the address you type into the browser. With `cloudflare`, the tunnel's public hostname (only used to print your link) |
+| `--host NAME` | this machine's hostname | the name on the certificate, and the address you type into the browser. With `cloudflare`, the tunnel's public hostname (only used to print your link) |
 | `--lan-ip IP` | detected | the address put into a self-signed certificate |
-| `--install-tailscale` | off | installs Tailscale and runs `tailscale up --ssh` (prints a sign-in link) |
 | `--encrypt-secrets` | off | moves secrets out of `config.yaml` into systemd encrypted credentials (see below) |
 | `--force-timers` | off | starts the schedule even if sign-in or the checks didn't pass. Not recommended |
 | `--only STEP,STEP` | all | runs just these steps, e.g. `--only verify,systemd` |
@@ -81,7 +79,6 @@ dashboard through a Cloudflare Tunnel and keeps your secrets where
 |---|---|---|
 | `cloudflare` (default) | you want it from your phone, anywhere, with no ports opened at home | a real certificate from Cloudflare and a hostname on your own domain. Needs a free Cloudflare account and a domain whose DNS is on Cloudflare. Cloudflare can see the traffic (it terminates TLS), so put Cloudflare Access in front |
 | `selfsigned` | you only use the dashboard at home | works immediately, but each browser warns once. Encryption without proof of identity |
-| `tailscale` | you want it from your phone, anywhere | a real Let's Encrypt certificate for `your-machine.your-tailnet.ts.net`, renewed monthly by cron. First enable HTTPS in the Tailscale admin console (DNS → HTTPS Certificates). Sign in with a **personal** account, and never run Tailscale on the school network |
 | `existing` | you already have a certificate | it uses `/etc/ssl/prep/fullchain.pem` and `privkey.pem` |
 | `none` | you don't want nginx at all | the dashboard is reachable only from the machine itself |
 
@@ -127,8 +124,7 @@ it prints the right link. To add or change the token later:
 ./install.sh --only nginx      # reads CLOUDFLARE_TUNNEL_TOKEN from .env
 ```
 
-Rather not use Cloudflare? Pass `--cert selfsigned` (home network only) or
-`--cert tailscale`.
+Rather not use Cloudflare? Pass `--cert selfsigned` (home network only).
 
 ### `--encrypt-secrets`, and when to use it
 
@@ -172,7 +168,7 @@ Each step's name is what `--only` and `--skip` take.
 | 10 | `verify` | **Phase B** (your real passwords and current prep) and **Phase C** (the whole chain against today's real diary). Phase C is a dry run: nothing goes to iCloud and the database is untouched | `python -m prep.phases B`, `python -m prep.phases C` |
 | 11 | `secrets` | only with `--encrypt-secrets` (see above) | `sudo deploy/setup-credentials.sh` |
 | 12 | `systemd` | installs five units with your user and paths filled in, plus one `LoadCredentialEncrypted=` line for each credential that actually exists (a unit naming a missing one refuses to start). Starts the dashboard. **Starts the timers only if sign-in and Phase B/C passed**; otherwise it tells you how to start them later | writes `/etc/systemd/system/prep-*.{service,timer}`, `systemctl enable --now` |
-| 13 | `nginx` | **cloudflare:** installs `deploy/nginx-prep-tunnel.conf` on `127.0.0.1:8088` and connects the tunnel with your token (it is never printed). **Other modes:** gets the certificate and installs `deploy/nginx-prep.conf`. Either way removes nginx's default site, tests the config and reloads it | `cloudflared service install`, or `openssl req` / `tailscale cert`; `nginx -t`, `systemctl reload nginx` |
+| 13 | `nginx` | **cloudflare:** installs `deploy/nginx-prep-tunnel.conf` on `127.0.0.1:8088` and connects the tunnel with your token (it is never printed). **Other modes:** gets the certificate and installs `deploy/nginx-prep.conf`. Either way removes nginx's default site, tests the config and reloads it | `cloudflared service install`, or `openssl req`; `nginx -t`, `systemctl reload nginx` |
 | 14 | `finish` | checks the dashboard answers directly and through nginx, lists the timers, prints your dashboard link, and lists what is still yours to do | `curl /healthz`, `systemctl list-timers` |
 
 ### What ends up running
@@ -243,8 +239,9 @@ The **Still to do** list at the end is the authoritative one. Typically:
    Setting up Telegram is in `LINUX.md`, section 3.
 4. **Open the dashboard** from the printed link (it ends in `?token=...`)
    once in each browser. Treat that link like a password.
-5. **Remote access** from your phone: `deploy/remote-access.md` (Tailscale
-   SSH, plus noVNC for the one job that needs a screen).
+5. **Remote access** from your phone: `deploy/remote-access.md` (SSH and
+   the machine's screen through the Cloudflare Tunnel, for the one job that
+   needs a screen).
 
 ---
 

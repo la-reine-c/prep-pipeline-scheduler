@@ -27,7 +27,6 @@ TUNNEL_PORT="8088"
 PREP_CALENDAR=""
 TEACHERS=""
 ENCRYPT=0
-INSTALL_TAILSCALE=0
 FORCE_TIMERS=0
 DRY_RUN=0
 ASSUME_YES=0
@@ -72,21 +71,18 @@ Your config
 
 The dashboard over HTTPS
   --host NAME            name on the certificate, and what you type in the
-                         browser (default: the Tailscale name with --cert
-                         tailscale, otherwise this machine's hostname). With
+                         browser (default: this machine's hostname). With
                          --cert cloudflare: the tunnel's public hostname
-  --cert MODE            cloudflare (default) | selfsigned | tailscale | existing | none
+  --cert MODE            cloudflare (default) | selfsigned | existing | none
                            cloudflare  Cloudflare Tunnel: reachable anywhere, no
                                        open ports, Cloudflare's certificate. Reads
                                        CLOUDFLARE_TUNNEL_TOKEN from .env or asks
                            selfsigned  make one in ${CERT_DIR}; browsers warn
-                           tailscale   a real certificate for your *.ts.net name
                            existing    use ${CERT_DIR}/{fullchain,privkey}.pem
                            none        no nginx; dashboard on the loopback only
   --lan-ip IP            address to put in a self-signed certificate
                          (default: detected)
   --tunnel-port PORT     loopback port nginx serves the tunnel on (default: 8088)
-  --install-tailscale    install Tailscale and run 'tailscale up --ssh' first
 
 Secrets
   --encrypt-secrets      after the checks pass, move secrets out of config.yaml
@@ -118,7 +114,6 @@ while [[ $# -gt 0 ]]; do
         --cert)             CERT="$2"; shift 2 ;;
         --lan-ip)           LAN_IP="$2"; shift 2 ;;
         --tunnel-port)      TUNNEL_PORT="$2"; shift 2 ;;
-        --install-tailscale) INSTALL_TAILSCALE=1; shift ;;
         --encrypt-secrets)  ENCRYPT=1; shift ;;
         --force-timers)     FORCE_TIMERS=1; shift ;;
         --only)             ONLY="$2"; shift 2 ;;
@@ -131,8 +126,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "${CERT}" in
-    cloudflare|selfsigned|tailscale|existing|none) ;;
-    *) echo "--cert must be cloudflare, selfsigned, tailscale, existing or none" >&2; exit 2 ;;
+    cloudflare|selfsigned|existing|none) ;;
+    *) echo "--cert must be cloudflare, selfsigned, existing or none" >&2; exit 2 ;;
 esac
 [[ "${WEB_PORT}" =~ ^[0-9]+$ ]] || { echo "--web-port must be a number" >&2; exit 2; }
 [[ "${TUNNEL_PORT}" =~ ^[0-9]+$ ]] || { echo "--tunnel-port must be a number" >&2; exit 2; }
@@ -308,15 +303,6 @@ do_packages() {
     # then refuses the whole line - nginx included.
     run sudo apt-get install -y python3-venv python3-pip util-linux rsync \
         openssl curl nginx
-    if [[ ${INSTALL_TAILSCALE} -eq 1 ]]; then
-        if command -v tailscale >/dev/null; then
-            ok "tailscale already installed"
-        else
-            run_sh "curl -fsSL https://tailscale.com/install.sh | sh"
-        fi
-        info "Sign in with a PERSONAL account, never your school one."
-        run sudo tailscale up --ssh
-    fi
     if [[ "${CERT}" == "cloudflare" ]]; then
         if command -v cloudflared >/dev/null; then
             ok "cloudflared already installed"
@@ -660,11 +646,6 @@ do_systemd() {
 
 detect_host() {
     if [[ -n "${HOST}" ]]; then return; fi
-    if [[ "${CERT}" == "tailscale" ]] && command -v tailscale >/dev/null; then
-        HOST="$(tailscale status --json 2>/dev/null | python3 -c \
-            'import sys, json; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' \
-            2>/dev/null || true)"
-    fi
     [[ -n "${HOST}" ]] || HOST="$(hostname -f 2>/dev/null || hostname)"
 }
 
@@ -698,22 +679,6 @@ do_nginx() {
                 ok "self-signed certificate for ${san}"
                 info "Browsers warn once per device - expected for self-signed."
             fi
-            ;;
-        tailscale)
-            command -v tailscale >/dev/null || [[ ${DRY_RUN} -eq 1 ]] \
-                || fail "tailscale is not installed - add --install-tailscale"
-            info "Needs HTTPS enabled in the Tailscale admin console (DNS -> HTTPS Certificates)."
-            run sudo tailscale cert --cert-file "${CERT_DIR}/fullchain.pem" \
-                --key-file "${CERT_DIR}/privkey.pem" "${HOST}"
-            # The certificate lasts 90 days; renew it monthly, quietly.
-            local renew="/etc/cron.monthly/prep-tailscale-cert"
-            echo "   ${DIM}\$ write ${renew}${RESET}"
-            if [[ ${DRY_RUN} -eq 0 ]]; then
-                printf '#!/bin/sh\ntailscale cert --cert-file %s/fullchain.pem --key-file %s/privkey.pem %s && systemctl reload nginx\n' \
-                    "${CERT_DIR}" "${CERT_DIR}" "${HOST}" | sudo tee "${renew}" >/dev/null
-                sudo chmod 755 "${renew}"
-            fi
-            ok "Tailscale certificate for ${HOST}, renewed monthly"
             ;;
         existing)
             if [[ ${DRY_RUN} -eq 0 ]]; then

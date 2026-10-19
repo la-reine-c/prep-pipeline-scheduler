@@ -21,25 +21,6 @@ This is the step that stalls people, so pick by how you reach the machine.
 With a Cloudflare Tunnel (the installer's default) there is no certificate to
 make here at all; Cloudflare's covers you.
 
-### Tailscale — easiest, and a real certificate
-
-If you already use Tailscale, it will issue a genuine Let's Encrypt
-certificate for your machine's `*.ts.net` name. No port forwarding, no public
-DNS, nothing exposed to the internet.
-
-```bash
-sudo tailscale cert --cert-file /etc/ssl/prep/fullchain.pem \
-                    --key-file  /etc/ssl/prep/privkey.pem \
-                    your-machine.your-tailnet.ts.net
-```
-
-Enable HTTPS in the Tailscale admin console first (DNS → HTTPS Certificates).
-Renew it from cron every couple of months; the certificate is 90-day.
-
-The dashboard is then reachable only from your own devices, and your phone
-counts. **Do not run Tailscale on the school network** — that is the VPN
-clause in the AUP. On your home machine it is fine.
-
 ### Cloudflare Tunnel — the default: reachable anywhere, certificate handled for you
 
 `cloudflared` makes an outbound connection, so no inbound port is opened and
@@ -69,7 +50,7 @@ sudo openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
 Your browser will warn once per device. Worth knowing why that warning is not
 merely an annoyance: a self-signed certificate gives you encryption but not
 identity, so clicking through it teaches you to click through the warning that
-exists to catch an impostor. Prefer Tailscale if you can.
+exists to catch an impostor. Prefer the Cloudflare Tunnel if you can.
 
 ---
 
@@ -137,4 +118,4 @@ the one it is sometimes reached for.
 
 **This dashboard never asks for your school username or password**, over TLS
 or otherwise. Sign in on Microsoft's own page, on the machine's own screen —
-see the VNC-over-Tailscale route in `PHASES.md`.
+see the screen-over-the-tunnel route in `deploy/remote-access.md`.

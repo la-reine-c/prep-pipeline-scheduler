@@ -208,16 +208,14 @@ journalctl -u prep-scrape -n 50 --no-pager
 
 ## 7. Reaching it from school
 
-Do not port-forward. Tailscale on the mini and your phone, signed in with a
-**personal** account:
+Do not port-forward. `install.sh` connects a **Cloudflare Tunnel** by
+default: an outbound connection from this machine, so nothing is opened on
+your router. Put Cloudflare Access in front of it so only your own email
+address gets through.
 
-```bash
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up
-```
-
-The dashboard is then `https://<your-machine>.<tailnet>.ts.net/?token=...`
-once nginx and the certificate are in place (`deploy/README.md`).
+The dashboard is then `https://prep.your-domain.com/?token=...`. The setup
+steps in the Cloudflare dashboard are in `INSTALL.md` under "Cloudflare
+Tunnel (the default)".
 
 ---
 

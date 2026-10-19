@@ -1,7 +1,7 @@
 """Small always-on web UI: see upcoming prep, log how long one actually took.
 
 Token-protected, LAN-bound. It holds school data, so don't port-forward it -
-reach it over Tailscale from outside the house.
+reach it through the Cloudflare Tunnel from outside the house.
 """
 from __future__ import annotations
 
